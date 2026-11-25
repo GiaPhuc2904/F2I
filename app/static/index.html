@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cộng sự Kho Offline — MISA Kế toán</title>
+  <link rel="stylesheet" href="/static/css/tailwind.min.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+  <!-- Thanh đầu trang: Tiêu đề + Nạp file MISA (.zip) + Công tắc Che tên & tiền -->
+  <header class="u60-header no-print">
+    <div>
+      <h1 class="u60-brand-title">Cộng sự Kho &amp; Công nợ (Chạy 100% không cần mạng)</h1>
+      <p id="header-subtitle" class="u60-brand-sub">Dành cho 4 sổ Excel chính xuất từ phần mềm MISA Kế toán</p>
+    </div>
+    <div class="u60-header-actions">
+      <button id="btn-privacy-toggle" type="button" class="u60-privacy-btn" aria-pressed="false" title="Bật khi cần chụp ảnh hoặc quay màn hình gửi ra ngoài">
+        <span class="u60-privacy-switch"></span>
+        <span id="privacy-toggle-label">Che tên &amp; tiền: Đang tắt</span>
+      </button>
+      <button id="btn-open-upload" type="button" class="btn-primary u60-btn-md">
+        Nạp file MISA (.zip)
+      </button>
+    </div>
+  </header>
+
+  <!-- Thanh chuyển mục trên màn hình nhỏ -->
+  <nav id="mobile-nav" class="u60-mobile-tabs no-print is-hidden" aria-label="Điều hướng di động">
+    <button type="button" class="mobile-nav-item is-active" data-tab="overview">1. Tổng quan kho</button>
+    <button type="button" class="mobile-nav-item" data-tab="health">2. Khám bệnh kho</button>
+    <button type="button" class="mobile-nav-item" data-tab="forecast">3. Dự báo nhập hàng</button>
+    <button type="button" class="mobile-nav-item" data-tab="credit">4. Công nợ &amp; Dòng tiền</button>
+  </nav>
+
+  <!-- Khung làm việc chính: Sidebar trái Sticky 4 mục + Vùng nội dung phải -->
+  <div id="app-shell" class="u60-shell is-hidden">
+    <aside class="u60-sidebar no-print" aria-label="Danh mục chính">
+      <div class="px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-600">4 Mục Quản Lý Kho</div>
+      <button type="button" class="nav-item is-active" data-tab="overview">
+        <span>1. Tổng quan kho</span>
+        <span id="nav-badge-overview" class="nav-badge">Hôm nay</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="health">
+        <span>2. Khám bệnh kho &amp; Gợi ý</span>
+        <span id="nav-badge-health" class="nav-badge">0</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="forecast">
+        <span>3. Dự báo nhập hàng</span>
+        <span id="nav-badge-forecast" class="nav-badge">11</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="credit">
+        <span>4. Công nợ &amp; Dòng tiền</span>
+        <span id="nav-badge-credit" class="nav-badge">0</span>
+      </button>
+
+      <div class="panel-subtle p-3 mt-4 space-y-1">
+        <div class="u60-sub font-semibold">Cách dự báo đang dùng:</div>
+        <div id="sidebar-active-model" class="text-sm font-bold text-slate-900">—</div>
+        <div id="sidebar-seasonal-note" class="u60-sub">Hệ số mùa vụ: Bình thường (0%)</div>
+      </div>
+    </aside>
+
+    <main class="u60-main">
+      <!-- ==================== MỤC 1: TỔNG QUAN KHO ==================== -->
+      <section id="tab-overview" class="space-y-5">
+        <div class="u60-section-head">
+          <div>
+            <h2 class="u60-section-title">1. Tổng quan sức khỏe kho &amp; tiền hàng</h2>
+            <p id="overview-period-note" class="u60-section-desc">Tóm tắt nhanh tình hình lãi thực tế, hàng cần đặt nhập và khách nợ lâu cần gọi nhắc.</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="btn-overview-export" type="button" class="btn-primary u60-btn-md">
+              Tải danh sách hàng cần nhập (.csv)
+            </button>
+          </div>
+        </div>
+
+        <!-- Bộ lọc nhanh mốc thời gian lùi từ ngày cuối kỳ sổ -->
+        <div class="u60-toolbar">
+          <div id="overview-period-pills" class="u60-pill-row">
+            <button type="button" class="filter-pill" data-period="30d">30 ngày gần nhất</button>
+            <button type="button" class="filter-pill" data-period="90d">90 ngày gần nhất</button>
+            <button type="button" class="filter-pill" data-period="365d">12 tháng</button>
+            <button type="button" class="filter-pill is-active" data-period="all">Toàn bộ kỳ sổ</button>
+          </div>
+          <div id="overview-active-range-label" class="u60-sub font-semibold"></div>
+        </div>
+
+        <div id="overview-warnings" class="space-y-2"></div>
+
+        <!-- 4 Thẻ chỉ số lớn -->
+        <div class="u60-grid-4">
+          <div class="u60-kpi-card">
+            <div id="kpi-profit-label" class="u60-kpi-label">Lãi gộp thực tế</div>
+            <div id="kpi-gross-profit" class="u60-kpi-value text-emerald-700">—</div>
+            <div id="kpi-gross-profit-sub" class="u60-kpi-sub">—</div>
+          </div>
+          <div class="u60-kpi-card">
+            <div id="kpi-stock-label" class="u60-kpi-label">Tổng tiền nhập hàng</div>
+            <div id="kpi-stock-value" class="u60-kpi-value">—</div>
+            <div id="kpi-stock-sub" class="u60-kpi-sub">—</div>
+          </div>
+          <div class="u60-kpi-card">
+            <div class="u60-kpi-label">Mặt hàng cần đặt nhập thêm</div>
+            <div id="kpi-reorder-count" class="u60-kpi-value text-blue-700">—</div>
+            <div id="kpi-reorder-sub" class="u60-kpi-sub">—</div>
+          </div>
+          <div class="u60-kpi-card">
+            <div class="u60-kpi-label">Tiền khách đang nợ chưa trả</div>
+            <div id="kpi-debt-total" class="u60-kpi-value text-red-700">—</div>
+            <div id="kpi-debt-sub" class="u60-kpi-sub">—</div>
+          </div>
+        </div>
+
+        <!-- 2 Bảng việc cần làm ngay -->
+        <div class="u60-grid-2">
+          <div class="panel p-5 space-y-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <h3 class="u60-card-title">Hàng bán mạnh cần đặt nhập đợt mới ngay</h3>
+                <p class="u60-card-sub">Tính từ nhịp mua – bán gần đây, sức bán dự kiến tuần tới và quy cách thùng</p>
+              </div>
+              <button type="button" class="btn-secondary u60-btn-sm js-jump-tab" data-target="health">Xem toàn bộ kho</button>
+            </div>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr>
+                    <th>Mặt hàng</th>
+                    <th id="th-urgent-stock" class="col-num">Nhịp nhập / tồn</th>
+                    <th class="col-num">Dự kiến tuần tới</th>
+                    <th>Đề xuất đặt</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-urgent-reorder"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel p-5 space-y-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <h3 class="u60-card-title">Khách nợ lâu cần gọi nhắc ngay</h3>
+                <p class="u60-card-sub">Nợ vượt ngưỡng kho hoặc đọng nhiều đơn quá hạn liên tiếp</p>
+              </div>
+              <button type="button" class="btn-secondary u60-btn-sm js-jump-tab" data-target="credit">Xem bảng công nợ</button>
+            </div>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr>
+                    <th>Khách hàng</th>
+                    <th class="col-num">Tuổi nợ &amp; Số đơn</th>
+                    <th class="col-num">Số tiền đang nợ</th>
+                    <th>Gợi ý xử lý</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-urgent-debt"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hộp kiểm tra tình trạng tệp MISA -->
+        <div class="panel p-5 space-y-2">
+          <h3 class="u60-card-title">Báo cáo kiểm tra các sổ MISA đang dùng</h3>
+          <div id="overview-file-check" class="text-sm text-slate-700 space-y-1"></div>
+        </div>
+      </section>
+
+      <!-- ==================== MỤC 2: KHÁM BỆNH KHO & GỢI Ý TỪNG MÓN ==================== -->
+      <section id="tab-health" class="space-y-5 is-hidden">
+        <div class="u60-section-head">
+          <div>
+            <h2 class="u60-section-title">2. Khám bệnh hàng hóa &amp; Gợi ý đặt từng món</h2>
+            <p class="u60-section-desc">Đối chiếu trực tiếp từ Danh mục, Sổ mua hàng, Sổ bán hàng. Lãi thực đã trừ vốn quà tặng 0đ và lọc riêng mã chưa tính giá vốn.</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" class="btn-secondary u60-btn-md js-jump-tab" data-target="forecast">Chỉnh dự báo / mùa vụ</button>
+            <button id="btn-health-export" type="button" class="btn-primary u60-btn-md">Xuất file Excel (.csv) đặt hàng</button>
+          </div>
+        </div>
+
+        <!-- 4 Bảng Khám bệnh kho -->
+        <div class="u60-grid-2">
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Bảng 1 — Hàng bán chạy nhất</h3>
+              <p class="u60-card-sub">Tách rõ số lượng bán thu tiền và số lượng xuất tặng kèm</p>
+            </div>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr>
+                    <th>Mặt hàng</th>
+                    <th class="col-num">SL bán</th>
+                    <th class="col-num">SL tặng KM</th>
+                    <th class="col-num">Doanh thu thuần</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-top-sellers"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Bảng 2 — Hàng kiếm lời nhiều nhất (đã có giá vốn)</h3>
+              <p class="u60-card-sub">Lãi thực = Doanh thu thuần trừ giá vốn (tự loại trừ mã MISA chưa tính giá vốn)</p>
+            </div>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr>
+                    <th>Mặt hàng</th>
+                    <th class="col-num">Giá vốn quà tặng</th>
+                    <th class="col-num">Lãi gộp thực</th>
+                    <th class="col-num">Tỷ suất lãi</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-top-profit"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 id="title-table-3" class="u60-card-title">Bảng 3 — Hàng bán mạnh sắp cạn đợt nhập</h3>
+              <p id="sub-table-3" class="u60-card-sub">Các món đang bán đều nhưng lô nhập gần nhất đã tiêu thụ gần hết</p>
+            </div>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr id="thead-table-3">
+                    <th>Mặt hàng</th>
+                    <th>Tình hình lô nhập</th>
+                    <th class="col-num">Dự kiến tuần tới</th>
+                    <th>Đề xuất đặt tới</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-frequent-stockouts"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Bảng 4 — Hàng nằm im lâu (≥ 60 ngày) / Bán chậm / KM dư</h3>
+              <p class="u60-card-sub">Mặt hàng hơn 2 tháng chưa phát sinh bán, lô nhập tiêu thụ chậm hoặc hàng KM còn dư</p>
+            </div>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr>
+                    <th>Mặt hàng</th>
+                    <th>Nhịp nhập / tồn</th>
+                    <th class="col-num">Chưa bán</th>
+                    <th>Tình trạng &amp; Xử lý</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-slow-promo"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bảng lớn: Gợi ý hành động cho từng mặt hàng (Lọc theo Kho/Hãng + Phân trang 50 dòng/trang) -->
+        <div class="panel p-5 space-y-4">
+          <div class="u60-toolbar">
+            <div>
+              <h3 class="u60-card-title">Gợi ý hành động cho từng mặt hàng trong kho</h3>
+              <p id="health-active-model-note" class="u60-card-sub">Số lượng dự kiến tuần tới tự động tính theo cách dự báo đang chọn.</p>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <select id="select-warehouse-health" class="u60-select" aria-label="Lọc theo Kho hoặc Hãng">
+                <option value="all">Tất cả kho / hãng</option>
+              </select>
+              <input id="input-search-health" type="search" class="u60-input-search" placeholder="Tìm tên hàng hoặc mã hàng..." />
+            </div>
+          </div>
+
+          <div id="warehouse-order-summary" class="u60-wh-summary"></div>
+
+          <div id="health-filter-pills" class="u60-pill-row">
+            <button type="button" class="filter-pill is-active" data-filter="all">Tất cả mặt hàng</button>
+            <button type="button" class="filter-pill" data-filter="reorder">Cần đặt nhập thêm</button>
+            <button type="button" class="filter-pill" data-filter="slow">Nằm im / Bán chậm</button>
+            <button type="button" class="filter-pill" data-filter="promo">Hàng KM</button>
+            <button type="button" class="filter-pill" data-filter="inactive">Chưa phát sinh</button>
+          </div>
+
+          <div class="u60-table-wrap table-scroll">
+            <table class="u60-table">
+              <thead>
+                <tr>
+                  <th>Mặt hàng</th>
+                  <th>Kho</th>
+                  <th id="th-health-stock">Đợt nhập cuối &amp; Đã bán</th>
+                  <th class="col-num">Bán TB/tuần</th>
+                  <th class="col-num">Dự kiến tuần tới</th>
+                  <th>Mức đủ bán</th>
+                  <th>Tình trạng</th>
+                  <th>Gợi ý hành động cụ thể</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-all-health"></tbody>
+            </table>
+          </div>
+
+          <div class="u60-pager">
+            <span id="pager-info-health">Trang 1</span>
+            <div class="u60-pager-btns">
+              <button id="btn-prev-health" type="button" class="btn-secondary u60-btn-sm">Trang trước</button>
+              <button id="btn-next-health" type="button" class="btn-secondary u60-btn-sm">Trang sau</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== MỤC 3: DỰ BÁO NHẬP HÀNG ==================== -->
+      <section id="tab-forecast" class="space-y-5 is-hidden">
+        <div class="u60-section-head">
+          <div>
+            <h2 class="u60-section-title">3. Dự báo sức bán &amp; Điều chỉnh nhịp mùa vụ</h2>
+            <p class="u60-section-desc">Máy tự chọn cách tính tối ưu theo độ dày sổ; chủ kho có thể tăng/giảm nhanh hệ số mùa vụ để cập nhật ngay số thùng đặt hàng.</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="btn-forecast-export" type="button" class="btn-primary u60-btn-md">Tải bảng dự báo &amp; đặt hàng (.csv)</button>
+          </div>
+        </div>
+
+        <div id="forecast-advice-banner" class="u60-banner-info"></div>
+
+        <!-- Cụm nút chỉnh tay hệ số mùa vụ / kinh doanh đồng bộ toàn kho -->
+        <div class="panel p-5 space-y-3">
+          <div>
+            <h3 class="u60-card-title">Điều chỉnh nhanh theo nhịp thị trường sắp tới</h3>
+            <p class="u60-card-sub">Bấm chọn để cộng/trừ trực tiếp vào dự báo tuần tới và số thùng gợi ý đặt ở Mục 1 &amp; Mục 2</p>
+          </div>
+          <div id="seasonal-mult-pills" class="u60-pill-row">
+            <button type="button" class="filter-pill is-active" data-mult="1">Bình thường (0%)</button>
+            <button type="button" class="filter-pill" data-mult="1.15">Cao điểm / Nắng nóng (+15%)</button>
+            <button type="button" class="filter-pill" data-mult="1.3">Sắp Lễ Tết (+30%)</button>
+            <button type="button" class="filter-pill" data-mult="0.85">Mùa chậm (-15%)</button>
+          </div>
+        </div>
+
+        <div class="u60-grid-3">
+          <div class="u60-kpi-card">
+            <div class="u60-kpi-label">Dẫn đầu Chính xác chu kỳ nhập</div>
+            <div id="leader-accurate-name" class="text-lg font-bold text-emerald-700">—</div>
+            <div id="leader-accurate-sub" class="u60-kpi-sub">—</div>
+          </div>
+          <div class="u60-kpi-card">
+            <div class="u60-kpi-label">Dẫn đầu Ít để hụt hàng</div>
+            <div id="leader-stockout-name" class="text-lg font-bold text-blue-700">—</div>
+            <div id="leader-stockout-sub" class="u60-kpi-sub">—</div>
+          </div>
+          <div class="u60-kpi-card">
+            <div class="u60-kpi-label">Dẫn đầu Ít ôm tồn thừa</div>
+            <div id="leader-overstock-name" class="text-lg font-bold text-amber-700">—</div>
+            <div id="leader-overstock-sub" class="u60-kpi-sub">—</div>
+          </div>
+        </div>
+
+        <div class="panel p-5 space-y-3">
+          <div>
+            <h3 class="u60-card-title">Đối chiếu sức bán thực tế và các cách dự báo trong các tuần vừa qua</h3>
+            <p class="u60-card-sub">Đường nét liền màu đậm là tổng sản lượng bán thực tế; các đường nét đứt là kết quả dự báo đối chứng.</p>
+          </div>
+          <div class="u60-chart-box">
+            <canvas id="chart-forecast-compare"></canvas>
+          </div>
+        </div>
+
+        <!-- Progressive Disclosure: Bảng 11 mô hình thu gọn mặc định -->
+        <details class="advanced-panel">
+          <summary class="advanced-summary">Nâng cao: Xem &amp; so sánh 11 cách tính dự báo (mặc định máy tự chọn tối ưu)</summary>
+          <div class="space-y-3">
+            <p class="u60-card-sub">Mỗi cách tính phù hợp với một kiểu mặt hàng và độ dày sổ khác nhau (nhóm Học máy mùa vụ phát huy mạnh nhất khi sổ dày từ 12–14 tháng qua đủ dịp Lễ/Tết).</p>
+            <div class="u60-table-wrap table-scroll">
+              <table class="u60-table">
+                <thead>
+                  <tr>
+                    <th>Cách dự báo</th>
+                    <th>Kiểu hàng &amp; Danh mục khuyên dùng</th>
+                    <th>Độ dày sổ khuyên dùng</th>
+                    <th class="col-num">Độ chính xác chu kỳ</th>
+                    <th class="col-num">Rủi ro đoán thiếu</th>
+                    <th class="col-num">Rủi ro đoán dư</th>
+                    <th>Chọn dùng</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-arena-models"></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <div class="panel p-5 space-y-4">
+          <div class="u60-toolbar">
+            <div>
+              <h3 class="u60-card-title">Dự báo chi tiết từng mặt hàng (1 tuần tới &amp; 4 tuần tới)</h3>
+              <p class="u60-card-sub">Nêu rõ lý do vì sao máy gợi ý con số đó (nhịp bán 4 tuần gần nhất, xu hướng hay hiệu ứng cuối tháng).</p>
+            </div>
+            <input id="input-search-forecast" type="search" class="u60-input-search" placeholder="Tìm mặt hàng cần xem dự báo..." />
+          </div>
+          <div class="u60-table-wrap table-scroll">
+            <table class="u60-table">
+              <thead id="thead-sku-forecasts"></thead>
+              <tbody id="tbody-sku-forecasts"></tbody>
+            </table>
+          </div>
+          <div class="u60-pager">
+            <span id="pager-info-forecast">Trang 1</span>
+            <div class="u60-pager-btns">
+              <button id="btn-prev-forecast" type="button" class="btn-secondary u60-btn-sm">Trang trước</button>
+              <button id="btn-next-forecast" type="button" class="btn-secondary u60-btn-sm">Trang sau</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== MỤC 4: CÔNG NỢ & DÒNG TIỀN ==================== -->
+      <section id="tab-credit" class="space-y-5 is-hidden">
+        <div class="u60-section-head">
+          <div>
+            <h2 class="u60-section-title">4. Theo dõi Công nợ khách hàng &amp; Dòng tiền ra vào</h2>
+            <p class="u60-section-desc">Tính đầy đủ từ Sổ công nợ 131, Sổ mua hàng và Sổ bán hàng (hoàn toàn không phụ thuộc sổ tồn kho).</p>
+          </div>
+        </div>
+
+        <div id="credit-style-banner" class="u60-banner-info"></div>
+
+        <!-- 4 Thẻ nhóm khách hàng đồng bộ pastel nhẹ, chọn bằng viền đậm -->
+        <div class="u60-grid-4">
+          <button type="button" class="u60-group-card" data-credit-group="call_now">
+            <span class="status-badge badge-danger"><span class="status-dot"></span>Cần gọi đòi ngay</span>
+            <div id="grp-count-call_now" class="u60-kpi-value text-red-700 mt-1">0 khách</div>
+            <div id="grp-amt-call_now" class="u60-kpi-sub">Đang nợ: 0 đ</div>
+          </button>
+          <button type="button" class="u60-group-card" data-credit-group="slow_but_pays">
+            <span class="status-badge badge-warning"><span class="status-dot"></span>Hay trả chậm nhưng có trả</span>
+            <div id="grp-count-slow_but_pays" class="u60-kpi-value text-amber-700 mt-1">0 khách</div>
+            <div id="grp-amt-slow_but_pays" class="u60-kpi-sub">Đang nợ: 0 đ</div>
+          </button>
+          <button type="button" class="u60-group-card" data-credit-group="new_customer">
+            <span class="status-badge badge-neutral"><span class="status-dot"></span>Khách mới</span>
+            <div id="grp-count-new_customer" class="u60-kpi-value text-slate-800 mt-1">0 khách</div>
+            <div id="grp-amt-new_customer" class="u60-kpi-sub">Đang nợ: 0 đ</div>
+          </button>
+          <button type="button" class="u60-group-card" data-credit-group="trusted">
+            <span class="status-badge badge-success"><span class="status-dot"></span>Khách trả rất đều</span>
+            <div id="grp-count-trusted" class="u60-kpi-value text-emerald-700 mt-1">0 khách</div>
+            <div id="grp-amt-trusted" class="u60-kpi-sub">Đang nợ: 0 đ</div>
+          </button>
+        </div>
+
+        <div class="panel p-5 space-y-4">
+          <div class="u60-toolbar">
+            <div class="u60-pill-row" id="credit-filter-pills">
+              <button type="button" class="filter-pill is-active" data-credit-filter="all">Tất cả khách hàng</button>
+              <button type="button" class="filter-pill" data-credit-filter="call_now">Cần gọi đòi ngay</button>
+              <button type="button" class="filter-pill" data-credit-filter="slow_but_pays">Hay trả chậm nhưng có trả</button>
+              <button type="button" class="filter-pill" data-credit-filter="new_customer">Khách mới</button>
+              <button type="button" class="filter-pill" data-credit-filter="trusted">Khách trả rất đều</button>
+            </div>
+            <input id="input-search-credit" type="search" class="u60-input-search" placeholder="Tìm tên khách hàng..." />
+          </div>
+
+          <div class="u60-table-wrap table-scroll">
+            <table class="u60-table">
+              <thead>
+                <tr>
+                  <th>Khách hàng</th>
+                  <th>Nhóm</th>
+                  <th class="col-num">Đơn chưa trả / Tổng</th>
+                  <th class="col-num">Thường trả sau</th>
+                  <th class="col-num">Đơn nợ lâu nhất</th>
+                  <th class="col-num">Số tiền đang nợ</th>
+                  <th>Gợi ý xử lý</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-credit-customers"></tbody>
+            </table>
+          </div>
+
+          <div class="u60-pager">
+            <span id="pager-info-credit">Trang 1</span>
+            <div class="u60-pager-btns">
+              <button id="btn-prev-credit" type="button" class="btn-secondary u60-btn-sm">Trang trước</button>
+              <button id="btn-next-credit" type="button" class="btn-secondary u60-btn-sm">Trang sau</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel p-5 space-y-2">
+          <h3 class="u60-card-title">Điểm nhấn dòng tiền thu – chi hàng hóa</h3>
+          <ul id="cashflow-highlights" class="u60-list-plain text-sm text-slate-700 space-y-1"></ul>
+        </div>
+
+        <!-- Bộ chọn nhanh khung tháng cho Biểu đồ 1 & 2 (mặc định 12 tháng gần nhất) -->
+        <div class="u60-toolbar">
+          <div>
+            <h3 class="u60-card-title">Biểu đồ dòng tiền thu – chi &amp; dư nợ theo tháng</h3>
+            <p class="u60-card-sub">Mặc định hiển thị 12 tháng gần nhất để cột rõ thoáng, dễ đọc</p>
+          </div>
+          <div id="cashflow-range-pills" class="u60-pill-row">
+            <button type="button" class="filter-pill" data-cf-months="6">6 tháng</button>
+            <button type="button" class="filter-pill is-active" data-cf-months="12">12 tháng</button>
+            <button type="button" class="filter-pill" data-cf-months="0">Toàn bộ</button>
+          </div>
+        </div>
+
+        <div class="u60-grid-2">
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Biểu đồ 1 — Tiền thu khách hàng vs Tiền chi nhập hàng theo tháng</h3>
+              <p class="u60-card-sub">Giúp chủ kho thấy rõ tháng nào dư tiền mặt, tháng nào dồn vốn nhập hàng</p>
+            </div>
+            <div class="u60-chart-box">
+              <canvas id="chart-cf-1"></canvas>
+            </div>
+          </div>
+
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Biểu đồ 2 — Tiền bán hàng vs Tiền thu thực tế &amp; Tiền nợ cuối tháng</h3>
+              <p class="u60-card-sub">Theo dõi tiền bán ra có thu kịp về túi hay đang nằm đọng ngoài khách</p>
+            </div>
+            <div class="u60-chart-box">
+              <canvas id="chart-cf-2"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="u60-grid-2">
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Biểu đồ 3a — Khách thường trả tiền sau mấy ngày?</h3>
+              <p class="u60-card-sub">Tỷ lệ các đơn đã thu tiền chia theo số ngày khách giữ nợ</p>
+            </div>
+            <div class="u60-chart-box-sm">
+              <canvas id="chart-cf-3a"></canvas>
+            </div>
+          </div>
+
+          <div class="panel p-5 space-y-3">
+            <div>
+              <h3 class="u60-card-title">Mục 3b — Khách trả bằng Tiền mặt hay Chuyển khoản?</h3>
+              <p class="u60-card-sub">Tỷ trọng các kênh thu tiền thực tế trong kỳ</p>
+            </div>
+            <div id="payment-mix-bars" class="pt-2"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== MÀN HÌNH / HỘP THOẠI NẠP FILE MISA (.ZIP) ==================== -->
+  <div id="upload-modal" class="u60-modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="upload-modal-title">
+    <div class="u60-modal-card space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="upload-modal-title" class="text-xl font-bold text-slate-900">Nạp tệp sổ kế toán MISA (.zip)</h2>
+          <p class="text-sm text-slate-600 mt-1">Chỉ cần nén <strong>4 sổ Excel chính</strong> xuất từ MISA thành 1 file <strong>.zip</strong> rồi kéo thả vào đây (không bắt buộc Sổ chi tiết vật tư). Dữ liệu nằm 100% trên máy này.</p>
+        </div>
+        <button id="btn-close-upload" type="button" class="btn-secondary u60-btn-sm is-hidden">Đóng</button>
+      </div>
+
+      <div id="setup-step-select" class="space-y-4">
+        <div class="u60-mode-grid">
+          <button type="button" class="u60-mode-card is-selected" data-upload-mode="merge">
+            <div class="font-bold text-slate-900 text-base">Cập nhật thêm tháng mới (Khuyên dùng)</div>
+            <div class="text-xs text-slate-600 mt-1">Giữ nguyên lịch sử các tháng cũ, tự cập nhật đơn mới trả tiền và tuyệt đối không bị trùng dòng.</div>
+          </button>
+          <button type="button" class="u60-mode-card" data-upload-mode="reset">
+            <div class="font-bold text-slate-900 text-base">Xóa cũ nạp lại từ đầu</div>
+            <div class="text-xs text-slate-600 mt-1">Xóa sạch dữ liệu cũ đang lưu trong ứng dụng để làm lại mới hoàn toàn từ tệp .zip này.</div>
+          </button>
+        </div>
+
+        <div id="zip-dropzone" class="u60-dropzone" tabindex="0" role="button" aria-label="Kéo thả hoặc bấm chọn tệp .zip MISA">
+          <input id="input-zip-file" type="file" accept=".zip,application/zip" class="is-hidden" />
+          <div class="text-lg font-bold text-slate-900">Kéo thả tệp .zip MISA vào đây</div>
+          <div class="text-sm text-slate-600 mt-1">Hoặc bấm chuột vào khung này để chọn tệp <strong>.zip</strong> từ máy tính</div>
+          <div class="text-xs text-slate-600 mt-3">
+            4 sổ chính cần có: <strong>Danh sách hàng hóa · Sổ chi tiết mua hàng · Sổ chi tiết bán hàng · Chi tiết công nợ phải thu</strong> *(có thêm Tổng hợp tồn kho càng tốt, không có vẫn chạy đầy đủ dự báo, mua bán &amp; dòng tiền)*.
+          </div>
+        </div>
+
+        <div id="upload-error-box" class="u60-banner-warn is-hidden"></div>
+
+        <div class="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-slate-200">
+          <div class="text-xs text-slate-600">Chưa sẵn tệp MISA? Bạn có thể mở thử kho mẫu 11 tháng để xem cách hoạt động:</div>
+          <button id="btn-load-demo" type="button" class="btn-secondary u60-btn-md">Dùng thử dữ liệu mẫu (11 tháng)</button>
+        </div>
+      </div>
+
+      <div id="setup-step-progress" class="space-y-4 is-hidden">
+        <div class="text-base font-bold text-slate-900" id="progress-step-text">Bước 1/4: Đang đọc sổ MISA...</div>
+        <div class="u60-progress-track">
+          <div id="progress-bar-fill" class="u60-progress-fill" style="width: 10%"></div>
+        </div>
+        <div class="u60-sub" id="progress-pct-label">Hoàn thành 10%</div>
+      </div>
+
+      <div id="progress-import-summary" class="panel-subtle p-3 text-sm text-slate-700 space-y-1 is-hidden"></div>
+
+      <div id="setup-step-done" class="space-y-4 is-hidden">
+        <div class="u60-banner-ok">
+          <div class="font-bold text-base">Đã đọc sổ &amp; khám kho hoàn tất!</div>
+          <div id="setup-done-rec-text" class="mt-1 text-sm"></div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-sm font-semibold text-slate-800">Bạn có thể tích chọn thêm 1–2 cách dự báo khác để tham khảo song song (không bắt buộc):</div>
+          <div id="setup-compare-options" class="space-y-2"></div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button id="btn-finish-setup" type="button" class="btn-primary u60-btn-lg">Vào xem kho ngay!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/vendor/chart.umd.min.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

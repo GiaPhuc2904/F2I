@@ -1,0 +1,31 @@
+# Python & Build
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+catboost_info/
+
+# Environment & Local State
+.env
+data/
+*.db
+*.db-shm
+*.db-wal
+offline_wheels/
+
+# TUYỆT ĐỐI CHẶN MỌI DỮ LIỆU THẬT MISA (Excel / ZIP) LỌT LÊN GITHUB
+*.xlsx
+*.xls
+*.zip
+*.~lock.*#
+real data/
+private_misa/
+uploads/
+exports/
