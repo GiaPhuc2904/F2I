@@ -738,6 +738,20 @@
       const underTxt = m.under_forecast_risk_pct != null ? fmtPct(m.under_forecast_risk_pct) : "—";
       const overTxt = m.over_forecast_risk_pct != null ? fmtPct(m.over_forecast_risk_pct) : "—";
 
+      const isRec = m.model_id === m1.recommended_model_id;
+      const winAcc = m.model_id === leaders.most_accurate && m.accuracy_est_pct != null;
+      const winSo = m.model_id === leaders.least_stockout_risk && m.under_forecast_risk_pct != null;
+      const winOv = m.model_id === leaders.least_overstock_risk && m.over_forecast_risk_pct != null;
+
+      const namePrefix = isRec ? '<span title="Cách dự báo tối ưu nhất cho kho hiện tại">🏆 </span>' : "";
+      const accHtml = (winAcc ? '<span title="Dẫn đầu độ chính xác chu kỳ">🥇 </span>' : "") + esc(accTxt);
+      const underHtml = (winSo ? '<span title="Rủi ro đoán thiếu thấp nhất">🥇 </span>' : "") + esc(underTxt);
+      const overHtml = (winOv ? '<span title="Rủi ro đoán dư thấp nhất">🥇 </span>' : "") + esc(overTxt);
+
+      const accCls = winAcc ? "col-num font-bold text-emerald-700" : "col-num font-semibold text-slate-900";
+      const soCls = winSo ? "col-num font-bold text-emerald-700" : "col-num";
+      const ovCls = winOv ? "col-num font-bold text-emerald-700" : "col-num";
+
       const actionHtml = isPrimary
         ? renderBadge("Đang dùng làm cách chính", "success")
         : (
@@ -750,12 +764,12 @@
 
       return (
         "<tr" + (isPrimary ? ' class="row-selected"' : "") + ">" +
-        '<td><div class="font-bold text-slate-900">' + esc(m.label_vi) + '</div><div class="u60-sub mt-1">' + esc(m.short_desc_vi) + "</div></td>" +
+        '<td><div class="font-bold text-slate-900">' + namePrefix + esc(m.label_vi) + '</div><div class="u60-sub mt-1">' + esc(m.short_desc_vi) + "</div></td>" +
         '<td class="col-wrap">' + styleBadge + '<div class="u60-sub mt-1">' + esc(m.best_for_goods_vi || "") + "</div></td>" +
         '<td class="col-wrap">' + readyBadge + "</td>" +
-        '<td class="col-num font-bold text-emerald-700">' + esc(accTxt) + "</td>" +
-        '<td class="col-num">' + esc(underTxt) + "</td>" +
-        '<td class="col-num">' + esc(overTxt) + "</td>" +
+        '<td class="' + accCls + '">' + accHtml + "</td>" +
+        '<td class="' + soCls + '">' + underHtml + "</td>" +
+        '<td class="' + ovCls + '">' + overHtml + "</td>" +
         "<td>" + actionHtml + "</td>" +
         "</tr>"
       );
