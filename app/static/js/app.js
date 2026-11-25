@@ -23,6 +23,8 @@
     healthQuery: "",
     healthPage: 1,
     forecastQuery: "",
+    forecastGroup: "all",
+    forecastUnitMode: "base",
     forecastPage: 1,
     creditFilter: "all",
     creditQuery: "",
@@ -801,8 +803,63 @@
     headHtml += "<th>Lý do dự báo</th></tr>";
     el("thead-sku-forecasts").innerHTML = headHtml;
 
+    const allAdj = getAdjustedItems();
+    const groupCounts = {};
+    allAdj.forEach(function (x) {
+      const g = x.demand_group_vi || "Khác";
+      groupCounts[g] = (groupCounts[g] || 0) + 1;
+    });
+    const groupOrder = [
+      "Bán đều ổn định",
+      "Bán đều · Có đợt tăng vọt",
+      "Bán thưa theo đợt",
+      "Hàng bán thưa",
+      "Chưa phát sinh",
+    ];
+    const groupKeys = Object.keys(groupCounts).sort(function (a, b) {
+      const ia = groupOrder.indexOf(a);
+      const ib = groupOrder.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    if (state.forecastGroup !== "all" && !groupCounts[state.forecastGroup]) {
+      state.forecastGroup = "all";
+    }
+    const grpPillsEl = el("forecast-group-pills");
+    if (grpPillsEl) {
+      let pillsHtml =
+        '<button type="button" class="filter-pill' + (state.forecastGroup === "all" ? " is-active" : "") + '" data-fc-group="all">Tất cả (' + fmtInt(allAdj.length) + ")</button>";
+      groupKeys.forEach(function (gk) {
+        const activeCls = state.forecastGroup === gk ? " is-active" : "";
+        pillsHtml +=
+          '<button type="button" class="filter-pill' + activeCls + '" data-fc-group="' + esc(gk) + '">' + esc(gk) + " (" + fmtInt(groupCounts[gk]) + ")</button>";
+      });
+      grpPillsEl.innerHTML = pillsHtml;
+    }
+    document.querySelectorAll("#forecast-unit-pills [data-fc-unit]").forEach(function (b) {
+      b.classList.toggle("is-active", b.getAttribute("data-fc-unit") === state.forecastUnitMode);
+    });
+
+    const isBoxMode = state.forecastUnitMode === "box";
+    function fmtFcCell(rawQty, item) {
+      const qVal = Number(rawQty || 0);
+      if (!isBoxMode) {
+        return fmtQty(qVal);
+      }
+      const upb = Math.max(1, Number(item.units_per_box || 1));
+      const boxLbl = String(item.suggested_box_uom || item.box_uom || "Thùng").toLowerCase();
+      if (upb > 1) {
+        const boxes = qVal <= 0 ? 0 : Math.ceil(qVal / upb);
+        return fmtInt(boxes) + "\u00a0" + boxLbl;
+      }
+      const rounded = qVal <= 0 ? 0 : Math.ceil(qVal);
+      return fmtInt(rounded) + "\u00a0" + String(item.base_uom || "đv").toLowerCase();
+    }
+
     const q = foldVi(state.forecastQuery);
-    const items = getAdjustedItems().filter(function (x) {
+    const items = allAdj.filter(function (x) {
+      if (state.forecastGroup !== "all" && (x.demand_group_vi || "Khác") !== state.forecastGroup) {
+        return false;
+      }
       if (!q) return true;
       return foldVi(displayProductName(x) + " " + displayProductCode(x)).indexOf(q) !== -1;
     });
@@ -826,16 +883,22 @@
     }
 
     el("tbody-sku-forecasts").innerHTML = pageRows.map(function (x) {
+      const upb = Math.max(1, Number(x.units_per_box || 1));
+      const boxLbl = x.suggested_box_uom || x.box_uom || "Thùng";
+      const uomMeta = (isBoxMode && upb > 1)
+        ? (fmtInt(upb) + " " + x.base_uom + "/" + boxLbl)
+        : x.base_uom;
       let rowHtml =
         "<tr>" +
-        '<td><div class="font-semibold">' + esc(displayProductName(x)) + '</div><div class="u60-sub">' + esc(displayProductCode(x)) + " (" + esc(x.base_uom) + ")</div></td>" +
+        '<td><div class="font-semibold">' + esc(displayProductName(x)) + '</div><div class="u60-sub">' + esc(displayProductCode(x)) + " (" + esc(uomMeta) + ")</div></td>" +
         "<td>" + esc(x.demand_group_vi) + "</td>" +
-        '<td class="col-num">' + fmtQty(x.avg_weekly_qty) + "</td>" +
-        '<td class="col-num font-bold text-blue-700">' + fmtQty(x.forecast_next_1w) + "</td>" +
-        '<td class="col-num font-semibold">' + fmtQty(x.forecast_next_4w) + "</td>";
+        '<td class="col-num" title="' + esc(fmtQty(x.avg_weekly_qty) + " " + x.base_uom) + '">' + esc(fmtFcCell(x.avg_weekly_qty, x)) + "</td>" +
+        '<td class="col-num font-bold text-blue-700" title="' + esc(fmtQty(x.forecast_next_1w) + " " + x.base_uom) + '">' + esc(fmtFcCell(x.forecast_next_1w, x)) + "</td>" +
+        '<td class="col-num font-semibold" title="' + esc(fmtQty(x.forecast_next_4w) + " " + x.base_uom) + '">' + esc(fmtFcCell(x.forecast_next_4w, x)) + "</td>";
       compIds.forEach(function (cid) {
         const cObj = (x.comparisons && x.comparisons[cid]) || null;
-        rowHtml += '<td class="col-num text-slate-700">' + (cObj ? fmtQty(cObj.next_1w * mult) : "—") + "</td>";
+        const cVal = cObj ? (cObj.next_1w * mult) : null;
+        rowHtml += '<td class="col-num text-slate-700"' + (cVal != null ? (' title="' + esc(fmtQty(cVal) + " " + x.base_uom) + '"') : "") + ">" + (cVal != null ? esc(fmtFcCell(cVal, x)) : "—") + "</td>";
       });
       const reasonTxt = Math.abs(mult - 1.0) > 1e-4
         ? (x.forecast_reason_vi + " · Đã nhân hệ số " + SEASONAL_LABELS[String(mult)])
@@ -1484,6 +1547,19 @@
         comps = comps.filter(function (c) { return c !== mid; });
       }
       saveAndApplyModels(curPrimary, comps);
+    });
+    el("forecast-group-pills").addEventListener("click", function (ev) {
+      const btn = ev.target.closest("[data-fc-group]");
+      if (!btn) return;
+      state.forecastGroup = btn.getAttribute("data-fc-group") || "all";
+      state.forecastPage = 1;
+      renderSkuForecastTable();
+    });
+    el("forecast-unit-pills").addEventListener("click", function (ev) {
+      const btn = ev.target.closest("[data-fc-unit]");
+      if (!btn) return;
+      state.forecastUnitMode = btn.getAttribute("data-fc-unit") || "base";
+      renderSkuForecastTable();
     });
     el("input-search-forecast").addEventListener("input", function (ev) {
       state.forecastQuery = ev.target.value || "";
